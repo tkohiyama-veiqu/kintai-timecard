@@ -41,7 +41,7 @@ const T = (d) => TYPES[(d && d.type) || ""] || TYPES[""];
 let toastTimer;
 function toast(msg) {
   const el = $("toast"); el.textContent = msg; el.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 4500);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, Math.min(12000, 4500 + msg.length * 60));
 }
 function show(view) {
   for (const id of ["bootView", "loginView", "pendingView", "appView"]) $(id).hidden = id !== view;
@@ -363,20 +363,52 @@ $("pDk").addEventListener("click", async () => {
   if (await mutateMine(a.key, (d) => { d.out = "18:00"; d.straight = true; }, { outAt: serverTimestamp() }))
     toast("直帰として 18:00 で退勤を記録しました。お疲れさまでした");
 });
-$("lvDate").value = ymd(new Date());
+$("lvFrom").value = ymd(new Date());
+$("lvFrom").addEventListener("change", () => {
+  if (!$("lvTo").value || $("lvTo").value < $("lvFrom").value) $("lvTo").value = $("lvFrom").value;
+});
+const shortDay = (key) => { const [, m, d] = key.split("-").map(Number); return m + "/" + d; };
+/* 開始日〜終了日の各日に、選んだ休みをまとめて登録する */
 $("leaveForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const v = $("lvDate").value, ty = $("lvType").value;
-  if (!v) { toast("日付を選んでください"); return; }
-  const cur = dayOf(S.my, v);
-  if (isLockedForMe(cur)) { toast("この日は退勤済みのため直接変更できません。表の行をタップして修正依頼を送ってください"); return; }
-  if (cur && cur.in && TYPES[ty].full) { toast("この日はすでに打刻があります。半日の休みにするか、表の行から修正してください"); return; }
-  if (!(await mutateMine(v, (d) => { d.type = ty; }))) return;
-  const [, m, dd] = v.split("-").map(Number);
-  const pr = paidRemain(S.my, S.myGrant);
-  const after = pr && TYPES[ty].paid ? pr.remain - TYPES[ty].paid + (cur && T(cur).paid || 0) : null;
-  if (after != null && after < 0) toast(m + "月" + dd + "日に登録しましたが、有給残が足りません（残 " + days(after) + "）。管理者に確認してください");
-  else toast(m + "月" + dd + "日に" + TYPES[ty].label + "を登録しました" + (after != null ? "（有給残 " + days(after) + "）" : ""));
+  const from = $("lvFrom").value, to = $("lvTo").value || from, ty = $("lvType").value, skipWe = $("lvSkipWe").checked;
+  if (!from) { toast("開始日を選んでください"); return; }
+  if (to < from) { toast("終了日は開始日以降の日にしてください"); return; }
+  const dates = [];
+  for (const d = new Date(from + "T00:00"); ymd(d) <= to; d.setDate(d.getDate() + 1)) {
+    if (skipWe && (d.getDay() === 0 || d.getDay() === 6)) continue;
+    dates.push(ymd(d));
+    if (dates.length > 62) break;
+  }
+  if (!dates.length) { toast("登録できる日がありません（土日を除く設定を確認してください）"); return; }
+  if (dates.length > 62) { toast("一度に登録できるのは62日までです。期間を短くしてください"); return; }
+
+  const btn = e.submitter || $("leaveForm").querySelector("button[type=submit]");
+  btn.disabled = true;
+  const prBefore = paidRemain(S.my, S.myGrant); // 書き込みで表示が更新される前の有給残
+  const ok = [], locked = [], punched = [], failed = [];
+  let paidAdded = 0;
+  for (const v of dates) {
+    const cur = dayOf(S.my, v);
+    if (isLockedForMe(cur)) { locked.push(v); continue; }
+    if (cur && cur.in && TYPES[ty].full) { punched.push(v); continue; }
+    if (await mutateMine(v, (d) => { d.type = ty; })) {
+      ok.push(v);
+      paidAdded += (TYPES[ty].paid || 0) - (cur ? (T(cur).paid || 0) : 0);
+    } else { failed.push(v); }
+  }
+  btn.disabled = false;
+
+  const parts = [];
+  if (ok.length) parts.push(TYPES[ty].label + "を" + ok.length + "日分登録しました" + (ok.length === 1 ? "（" + shortDay(ok[0]) + "）" : "（" + shortDay(ok[0]) + "〜" + shortDay(ok[ok.length - 1]) + "）"));
+  if (locked.length) parts.push("退勤済みのため飛ばした日：" + locked.map(shortDay).join("、"));
+  if (punched.length) parts.push("打刻があるため飛ばした日：" + punched.map(shortDay).join("、"));
+  if (failed.length) parts.push("登録できなかった日：" + failed.map(shortDay).join("、"));
+  if (prBefore && TYPES[ty].paid && ok.length) {
+    const after = prBefore.remain - paidAdded;
+    parts.push(after < 0 ? "有給残が足りません（残 " + days(after) + "）。管理者に確認してください" : "有給残 " + days(after));
+  }
+  toast(parts.join("。") || "登録できる日がありませんでした");
 });
 $("sPrev").addEventListener("click", () => { S.sView.setMonth(S.sView.getMonth() - 1); render(); });
 $("sNext").addEventListener("click", () => { S.sView.setMonth(S.sView.getMonth() + 1); render(); });

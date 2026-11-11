@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>勤怠タイムカード</title>
+<title>勤怠管理</title>
 <meta name="description" content="出勤・退勤の打刻と休暇の登録、管理者による勤怠の確認ができる勤怠管理アプリ">
-<meta name="theme-color" content="#1f5f73">
+<meta name="theme-color" content="#35646b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -24,7 +24,7 @@
   <!-- ===== 読み込み中・設定不足 ===== -->
   <section id="bootView" class="center">
     <div class="auth-card">
-      <h1>勤怠タイムカード</h1>
+      <h1>勤怠管理</h1>
       <p id="bootMsg">読み込み中…</p>
     </div>
   </section>
@@ -32,7 +32,7 @@
   <!-- ===== ログイン ===== -->
   <section id="loginView" class="center" hidden>
     <div class="auth-card">
-      <h1>勤怠タイムカード</h1>
+      <h1>勤怠管理</h1>
       <p>会社から案内されたアカウントでログインしてください。初めての人は、ログイン後に管理者の承認を待ってから使えるようになります。</p>
       <button class="btn primary" id="googleBtn" type="button">Google アカウントでログイン</button>
       <div class="divider">またはメールアドレス</div>
@@ -52,7 +52,7 @@
   <!-- ===== 承認待ち・利用停止 ===== -->
   <section id="pendingView" class="center" hidden>
     <div class="auth-card">
-      <h1>勤怠タイムカード</h1>
+      <h1>勤怠管理</h1>
       <p id="pendingMsg">管理者の承認待ちです。承認されると、この画面が自動で切り替わります。</p>
       <form id="nameForm">
         <label class="empty-note" for="myName">表示名（管理者の画面に出る名前）</label>
@@ -67,7 +67,7 @@
   <!-- ===== アプリ本体 ===== -->
   <div id="appView" class="stack" hidden>
     <header>
-      <h1>勤怠タイムカード<small id="viewName">従業員</small></h1>
+      <h1>勤怠管理<small id="viewName">従業員</small></h1>
       <div class="head-right">
         <nav class="tabs" id="tabs" hidden aria-label="画面の切り替え">
           <a href="#staff" id="tabStaff">従業員</a>
@@ -99,7 +99,12 @@
 
       <form class="leave-form" id="leaveForm" autocomplete="off">
         <strong>休暇の登録</strong>
-        <input type="date" id="lvDate" aria-label="休暇の日付">
+        <span class="range">
+          <input type="date" id="lvFrom" aria-label="休暇の開始日">
+          <span>〜</span>
+          <input type="date" id="lvTo" aria-label="休暇の終了日">
+        </span>
+        <label class="check" for="lvSkipWe"><input type="checkbox" id="lvSkipWe" checked>土日を除く</label>
         <select id="lvType" aria-label="休暇の種類">
           <option value="paid">有給（1日）</option>
           <option value="paidHalf">有給（半日）</option>
@@ -109,7 +114,7 @@
           <option value="comp">代休</option>
         </select>
         <button class="btn primary" type="submit">登録</button>
-        <span class="hint">半日有給・半休の日は、残りの半日を出勤・退勤で打刻してください。休日出勤した日は、表の行をタップして区分を「休日出勤」にすると代休の残日数に加算されます。</span>
+        <span class="hint">1日だけのときは、開始日と終了日を同じ日にしてください（終了日が空でも1日として登録します）。退勤済みの日と、打刻がある日の終日の休みは登録せずに飛ばします。</span>
       </form>
 
       <dl class="summary" aria-label="自分の月の集計">
@@ -118,9 +123,9 @@
         <div><dt>総残業</dt><dd id="sOt" class="red">0:00</dd></div>
         <div><dt>有給・特別休暇を含む労働時間</dt><dd id="sPayable">0:00</dd></div>
         <div><dt>有給残（取得日数）</dt><dd id="sPaid" class="grn">未設定</dd></div>
-        <div><dt>特別休暇（今月）</dt><dd id="sSpecial" class="grn">0日</dd></div>
         <div><dt>休暇・半休（今月）</dt><dd id="sOff" class="amb">0日</dd></div>
         <div><dt>代休取得（今月）／代休残</dt><dd id="sComp" class="vio">0日</dd></div>
+        <div><dt>特別休暇（今月）</dt><dd id="sSpecial" class="grn">0日</dd></div>
       </dl>
 
       <div class="bar">
@@ -132,7 +137,7 @@
         <span class="std-note" id="sStd"></span>
       </div>
 
-      <div class="table-box">
+      <div class="table-box month-scroll">
         <table>
           <thead><tr><th>日付</th><th>区分</th><th>出勤</th><th>退勤</th><th class="num">休憩</th><th class="num">実働</th><th class="num">残業</th><th>メモ</th></tr></thead>
           <tbody id="sRows"></tbody>
@@ -149,7 +154,32 @@
         </div>
       </section>
 
-      <p class="rules">退勤した日の記録は自分では変更できません。変更したいときは表の行をタップし、修正依頼を管理者に送ってください。直行は 09:00、直帰は 18:00 で記録します。<br>休憩は労働基準法に沿って自動で差し引きます（勤務が6時間を超えると45分、8時間を超えると60分）。有給と特別休暇は1日につき所定労働時間分を「有給・特別休暇を含む労働時間」に加えます（半日有給は半分）。休暇・半休・代休は加えません。どの休みも残業には含めません。</p>
+      <div class="notes" aria-label="使い方の注意">
+        <section>
+          <h3>退勤した日の修正</h3>
+          <p>退勤した日の記録は、自分では変更できません。</p>
+          <p>変更したいときは、表の行をタップして修正依頼を管理者に送ってください。承認されると記録に反映されます。</p>
+        </section>
+        <section>
+          <h3>直行・直帰</h3>
+          <p>直行は 09:00 で出勤、直帰は 18:00 で退勤として記録します。</p>
+        </section>
+        <section>
+          <h3>休憩時間</h3>
+          <p>休憩は労働基準法に沿って自動で差し引きます。</p>
+          <p>勤務が6時間を超えると45分、8時間を超えると60分です。</p>
+        </section>
+        <section>
+          <h3>休みの計算</h3>
+          <p>有給と特別休暇は、1日につき所定労働時間分を「有給・特別休暇を含む労働時間」に加えます。半日有給は半分です。</p>
+          <p>休暇・半休・代休は加えません。どの休みも残業には含めません。</p>
+        </section>
+        <section>
+          <h3>半日の休み・休日出勤</h3>
+          <p>半日有給・半休の日は、残りの半日を出勤・退勤で打刻してください。</p>
+          <p>休日出勤した日は、表の行をタップして区分を「休日出勤」にすると、代休の残日数に加算されます。</p>
+        </section>
+      </div>
 
       <div class="actions">
         <span class="empty-note" id="sEmpty" hidden>この月の記録はまだありません。「出勤」で打刻するか、行をタップして時刻を入力できます。</span>
@@ -241,7 +271,7 @@
           <span class="hint" id="gInfo"></span>
         </form>
         <p class="empty-note" style="margin:0">行をタップすると、この従業員の記録や休暇を修正できます。</p>
-        <div class="table-box">
+        <div class="table-box month-scroll">
           <table>
             <thead><tr><th>日付</th><th>区分</th><th>出勤</th><th>退勤</th><th class="num">休憩</th><th class="num">実働</th><th class="num">残業</th><th>メモ</th></tr></thead>
             <tbody id="dRows"></tbody>
