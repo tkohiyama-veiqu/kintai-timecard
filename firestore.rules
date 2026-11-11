@@ -61,11 +61,16 @@ service cloud.firestore {
         && d.updatedAt == request.time
         && d.keys().hasOnly(['uid', 'date', 'ym', 'type', 'in', 'out', 'breakMin', 'note', 'direct', 'straight', 'inAt', 'outAt', 'updatedAt']);
     }
+    // 有給・有給（半日）・特別休暇は、従業員は自分で付けられない（休暇申請 → 管理者の承認でのみ付く）
+    function leaveOk(prevType) {
+      let t = request.resource.data.get('type', '');
+      return !(t in ['paid', 'paidHalf', 'special']) || t == prevType;
+    }
     match /attendance/{uid}/days/{date} {
       allow read: if (isSelf(uid) && isActive()) || isAdmin();
-      allow create: if isAdmin() || (isSelf(uid) && isActive() && validDay(uid, date));
+      allow create: if isAdmin() || (isSelf(uid) && isActive() && validDay(uid, date) && leaveOk(''));
       // 退勤済みの日は、従業員は変更も削除もできない
-      allow update: if isAdmin() || (isSelf(uid) && isActive() && !closed(resource.data) && validDay(uid, date));
+      allow update: if isAdmin() || (isSelf(uid) && isActive() && !closed(resource.data) && validDay(uid, date) && leaveOk(resource.data.get('type', '')));
       allow delete: if isAdmin() || (isSelf(uid) && isActive() && !closed(resource.data));
     }
     // 管理者が全員分をまとめて読む（collectionGroup）
@@ -79,7 +84,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ---- 修正依頼 ----
+    // ---- 修正依頼・休暇申請 ----
+    function validLeave(r) {
+      return r.get('kind', '') != 'leave'
+        || (r.dates is list && r.dates.size() >= 1 && r.dates.size() <= 62
+            && r.leaveType in ['paid', 'paidHalf', 'special']);
+    }
     match /requests/{rid} {
       allow read: if (signedIn() && resource.data.uid == request.auth.uid) || isAdmin();
       allow create: if isActive()
@@ -87,7 +97,8 @@ service cloud.firestore {
         && request.resource.data.status == 'pending'
         && request.resource.data.date is string
         && request.resource.data.reason is string && request.resource.data.reason.size() <= 200
-        && request.resource.data.keys().hasOnly(['uid', 'date', 'want', 'reason', 'status', 'createdAt']);
+        && request.resource.data.keys().hasOnly(['uid', 'date', 'want', 'reason', 'status', 'createdAt', 'kind', 'dates', 'leaveType'])
+        && validLeave(request.resource.data);
       // 本人は承認待ちの自分の依頼だけ取り消せる。承認・却下は管理者だけ
       allow delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid && resource.data.status == 'pending');
       allow update: if isAdmin();

@@ -108,26 +108,6 @@
         <div><dt>特別休暇（今月）</dt><dd id="sSpecial" class="grn">0日</dd></div>
       </dl>
 
-      <form class="leave-form" id="leaveForm" autocomplete="off">
-        <strong>休暇の登録</strong>
-        <span class="range">
-          <input type="date" id="lvFrom" aria-label="休暇の開始日">
-          <span>〜</span>
-          <input type="date" id="lvTo" aria-label="休暇の終了日">
-        </span>
-        <label class="check" for="lvSkipWe"><input type="checkbox" id="lvSkipWe" checked>土日を除く</label>
-        <select id="lvType" aria-label="休暇の種類">
-          <option value="off" selected>休暇</option>
-          <option value="paid">有給（1日）</option>
-          <option value="paidHalf">有給（半日）</option>
-          <option value="special">特別休暇</option>
-          <option value="half">半休</option>
-          <option value="comp">代休</option>
-        </select>
-        <button class="btn primary" type="submit">登録</button>
-        <span class="hint">1日だけのときは、開始日と終了日を同じ日にしてください（終了日が空でも1日として登録します）。退勤済みの日と、打刻がある日の終日の休みは登録せずに飛ばします。</span>
-      </form>
-
       <div class="bar">
         <button class="nav" id="sPrev" type="button" aria-label="前の月">←</button>
         <h2 class="month" id="sMonth"></h2>
@@ -144,11 +124,29 @@
         </table>
       </div>
 
+      <form class="leave-form" id="leaveForm" autocomplete="off">
+        <strong>休暇申請</strong>
+        <span class="range">
+          <input type="date" id="lvFrom" aria-label="休暇の開始日">
+          <span>〜</span>
+          <input type="date" id="lvTo" aria-label="休暇の終了日">
+        </span>
+        <label class="check" for="lvSkipWe"><input type="checkbox" id="lvSkipWe" checked>土日を除く</label>
+        <select id="lvType" aria-label="休暇の種類">
+          <option value="paid" selected>有給（1日）</option>
+          <option value="paidHalf">有給（半日）</option>
+          <option value="special">特別休暇</option>
+        </select>
+        <input type="text" id="lvReason" maxlength="200" placeholder="理由（任意）例：私用、慶弔" aria-label="申請の理由" style="flex:1; min-width:12em">
+        <button class="btn primary" type="submit">申請</button>
+        <span class="hint">申請すると管理者に承認依頼が届き、承認されるとカレンダーに反映されます。1日だけのときは、終了日を空のままにしてください。</span>
+      </form>
+
       <section class="stack" id="myReqBox" hidden style="gap:10px">
-        <h2>修正依頼</h2>
+        <h2>申請・依頼の状況</h2>
         <div class="table-box">
           <table>
-            <thead><tr><th>日付</th><th>依頼内容</th><th>理由</th><th>状態</th><th>管理者のコメント</th></tr></thead>
+            <thead><tr><th>種類</th><th>日付</th><th>内容</th><th>理由</th><th>状態</th><th>管理者のコメント</th></tr></thead>
             <tbody id="myReqRows"></tbody>
           </table>
         </div>
@@ -163,8 +161,14 @@
           <p>変更したいときは、表の行をタップして修正依頼を管理者に送ってください。承認されると記録に反映されます。</p>
         </section>
         <section>
-          <h3>直行・直帰</h3>
+          <h3>直行・直帰と手入力</h3>
           <p>直行は 09:00 で出勤、直帰は 18:00 で退勤として記録します。</p>
+          <p>カレンダーの行をタップして時刻を手入力するときも、出勤 9:00・退勤 18:00 が最初から入っています。違う時刻なら書き換えてから保存してください。</p>
+        </section>
+        <section>
+          <h3>休暇申請</h3>
+          <p>有給（1日・半日）と特別休暇は、カレンダーの下の「休暇申請」から申請します。管理者が承認すると、カレンダーに反映されます。</p>
+          <p>申請の結果は「申請・依頼の状況」で確認できます。</p>
         </section>
         <section>
           <h3>休憩時間</h3>
@@ -194,12 +198,12 @@
     <main id="adminView" hidden>
       <section class="stack" style="gap:10px">
         <div class="section-head">
-          <h2>修正依頼<span class="badge" id="reqBadge" hidden>0</span></h2>
-          <span>承認すると依頼の内容で記録を書き換えます</span>
+          <h2>休暇申請・修正依頼<span class="badge" id="reqBadge" hidden>0</span></h2>
+          <span>承認すると、申請・依頼の内容で記録を書き換えます</span>
         </div>
         <div class="table-box">
           <table>
-            <thead><tr><th>従業員</th><th>日付</th><th>今の記録</th><th>依頼内容</th><th>理由</th><th>操作</th></tr></thead>
+            <thead><tr><th>従業員</th><th>種類</th><th>日付</th><th>今の記録・有給残</th><th>内容</th><th>理由</th><th>操作</th></tr></thead>
             <tbody id="reqRows"></tbody>
           </table>
         </div>
@@ -314,6 +318,7 @@
         <option value="comp">代休</option>
         <option value="hw">休日出勤</option>
       </select>
+      <span class="sub" id="typeNote" hidden>有給・特別休暇は、カレンダーの下の「休暇申請」から申請してください</span>
       <label for="fIn">出勤</label><input type="time" id="fIn">
       <label for="fOut">退勤</label><input type="time" id="fOut">
       <label for="fBreak">休憩（分）</label><input type="number" id="fBreak" min="0" max="600" step="5" placeholder="自動">

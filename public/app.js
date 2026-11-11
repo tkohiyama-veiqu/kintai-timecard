@@ -131,6 +131,12 @@ function describe(w) {
   if (w.note) parts.push("メモ：" + w.note);
   return parts.join("　");
 }
+/* 管理者の承認が必要な休み（従業員は休暇申請からしか付けられない） */
+const APPROVAL_TYPES = ["paid", "paidHalf", "special"];
+const shortDay = (key) => { const [, m, d] = key.split("-").map(Number); return m + "/" + d; };
+const rangeLabel = (dates) => dates.length === 1 ? shortDay(dates[0]) : shortDay(dates[0]) + "〜" + shortDay(dates[dates.length - 1]);
+const requestDays = (r) => r.kind === "leave" ? rangeLabel(r.dates || [r.date]) + "（" + (r.dates || [r.date]).length + "日）" : dayLabel(r.date);
+const requestBody = (r) => r.kind === "leave" ? (TYPES[r.leaveType] || TYPES[""]).label : describe(r.want);
 
 /* ================= Firebase ================= */
 const configured = firebaseConfig && firebaseConfig.apiKey && !String(firebaseConfig.apiKey).startsWith("YOUR_");
@@ -281,7 +287,7 @@ function renderMonthTable(tbody, months, view, editable, pending) {
     html += '<tr class="' + cls + '" data-key="' + key + '"' + (editable ? ' tabindex="0"' : "") + ">" +
       '<td class="day mono">' + (m + 1) + "/" + pad(i) + "（" + WD[dt.getDay()] + "）</td>" +
       "<td>" + (ty.label ? '<span class="pill sm ' + ty.cls + '">' + ty.label + "</span>" : "") +
-        (pending && pending.has(key) ? ' <span class="pill sm req">修正依頼中</span>' : "") + "</td>" +
+        (pending && pending.has(key) ? ' <span class="pill sm req">' + pending.get(key) + "</span>" : "") + "</td>" +
       '<td class="mono t-in">' + (d && d.in ? esc(d.in) + (d.direct ? '<span class="mark">直行</span>' : "") : DASH) + "</td>" +
       '<td class="mono t-out">' + (d && d.out ? esc(d.out) + (d.straight ? '<span class="mark">直帰</span>' : "") : (live ? '<span class="live">勤務中</span>' : DASH)) + "</td>" +
       '<td class="mono num">' + (c && c.work != null ? fmt(c.br) : DASH) + "</td>" +
@@ -310,7 +316,11 @@ function renderStaff() {
 
   $("sMonth").textContent = S.sView.getFullYear() + "年" + (S.sView.getMonth() + 1) + "月";
   $("sStd").textContent = "所定労働 " + fmt(S.settings.std) + "（超過分を残業として集計）";
-  const pending = new Set(S.myReq.filter((r) => r.status === "pending").map((r) => r.date));
+  const pending = new Map();
+  for (const r of S.myReq.filter((x) => x.status === "pending")) {
+    if (r.kind === "leave") (r.dates || []).forEach((v) => pending.set(v, "休暇申請中"));
+    else pending.set(r.date, "修正依頼中");
+  }
   const any = renderMonthTable($("sRows"), S.my, S.sView, true, pending);
   const t = monthTotals(S.my, S.sView), lt = longTotals(S.my, S.sView.getFullYear());
   $("sDays").textContent = t.days + "日";
@@ -331,7 +341,7 @@ function renderStaff() {
   const RS = { pending: ["承認待ち", "req"], approved: ["承認済み", "ok"], rejected: ["却下", "ng"] };
   $("myReqRows").innerHTML = items.map((r) => {
     const s2 = RS[r.status] || RS.pending;
-    return '<tr><td class="mono">' + dayLabel(r.date) + '</td><td class="wrap">' + esc(describe(r.want)) + '</td><td class="wrap">' + esc(r.reason) +
+    return "<tr><td>" + (r.kind === "leave" ? "休暇申請" : "修正依頼") + '</td><td class="mono">' + requestDays(r) + '</td><td class="wrap">' + esc(requestBody(r)) + '</td><td class="wrap">' + esc(r.reason) +
       '</td><td><span class="pill sm ' + s2[1] + '">' + s2[0] + '</span></td><td class="wrap">' + esc(r.adminNote) + "</td></tr>";
   }).join("");
 }
@@ -363,15 +373,16 @@ $("pDk").addEventListener("click", async () => {
   if (await mutateMine(a.key, (d) => { d.out = "18:00"; d.straight = true; }, { outAt: serverTimestamp() }))
     toast("直帰として 18:00 で退勤を記録しました。お疲れさまでした");
 });
+/* ---------- 休暇申請（有給・有給半日・特別休暇は管理者の承認が必要） ---------- */
 $("lvFrom").value = ymd(new Date());
 $("lvFrom").addEventListener("change", () => {
   if (!$("lvTo").value || $("lvTo").value < $("lvFrom").value) $("lvTo").value = $("lvFrom").value;
 });
-const shortDay = (key) => { const [, m, d] = key.split("-").map(Number); return m + "/" + d; };
-/* 開始日〜終了日の各日に、選んだ休みをまとめて登録する */
 $("leaveForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const from = $("lvFrom").value, to = $("lvTo").value || from, ty = $("lvType").value, skipWe = $("lvSkipWe").checked;
+  const reason = $("lvReason").value.trim();
+  if (!APPROVAL_TYPES.includes(ty)) return;
   if (!from) { toast("開始日を選んでください"); return; }
   if (to < from) { toast("終了日は開始日以降の日にしてください"); return; }
   const dates = [];
@@ -380,35 +391,27 @@ $("leaveForm").addEventListener("submit", async (e) => {
     dates.push(ymd(d));
     if (dates.length > 62) break;
   }
-  if (!dates.length) { toast("登録できる日がありません（土日を除く設定を確認してください）"); return; }
-  if (dates.length > 62) { toast("一度に登録できるのは62日までです。期間を短くしてください"); return; }
+  if (!dates.length) { toast("申請できる日がありません（土日を除く設定を確認してください）"); return; }
+  if (dates.length > 62) { toast("一度に申請できるのは62日までです。期間を短くしてください"); return; }
+  const pendingDates = new Set(S.myReq.filter((r) => r.status === "pending" && r.kind === "leave").flatMap((r) => r.dates || []));
+  const dup = dates.filter((v) => pendingDates.has(v));
+  if (dup.length) { toast("承認待ちの休暇申請と重なっています：" + dup.map(shortDay).join("、")); return; }
 
   const btn = e.submitter || $("leaveForm").querySelector("button[type=submit]");
   btn.disabled = true;
-  const prBefore = paidRemain(S.my, S.myGrant); // 書き込みで表示が更新される前の有給残
-  const ok = [], locked = [], punched = [], failed = [];
-  let paidAdded = 0;
-  for (const v of dates) {
-    const cur = dayOf(S.my, v);
-    if (isLockedForMe(cur)) { locked.push(v); continue; }
-    if (cur && cur.in && TYPES[ty].full) { punched.push(v); continue; }
-    if (await mutateMine(v, (d) => { d.type = ty; })) {
-      ok.push(v);
-      paidAdded += (TYPES[ty].paid || 0) - (cur ? (T(cur).paid || 0) : 0);
-    } else { failed.push(v); }
-  }
+  try {
+    await addDoc(collection(db, "requests"), {
+      uid: S.user.uid, kind: "leave", date: dates[0], dates, leaveType: ty, reason,
+      status: "pending", createdAt: serverTimestamp()
+    });
+    $("lvReason").value = "";
+    const pr = paidRemain(S.my, S.myGrant);
+    const need = (TYPES[ty].paid || 0) * dates.length;
+    let msg = TYPES[ty].label + "を" + dates.length + "日分申請しました（" + rangeLabel(dates) + "）。管理者の承認をお待ちください";
+    if (pr && need && pr.remain - need < 0) msg += "。有給残が足りない可能性があります（残 " + days(pr.remain) + "）";
+    toast(msg);
+  } catch (err) { toast("申請できませんでした（" + (err.code || err.message) + "）"); }
   btn.disabled = false;
-
-  const parts = [];
-  if (ok.length) parts.push(TYPES[ty].label + "を" + ok.length + "日分登録しました" + (ok.length === 1 ? "（" + shortDay(ok[0]) + "）" : "（" + shortDay(ok[0]) + "〜" + shortDay(ok[ok.length - 1]) + "）"));
-  if (locked.length) parts.push("退勤済みのため飛ばした日：" + locked.map(shortDay).join("、"));
-  if (punched.length) parts.push("打刻があるため飛ばした日：" + punched.map(shortDay).join("、"));
-  if (failed.length) parts.push("登録できなかった日：" + failed.map(shortDay).join("、"));
-  if (prBefore && TYPES[ty].paid && ok.length) {
-    const after = prBefore.remain - paidAdded;
-    parts.push(after < 0 ? "有給残が足りません（残 " + days(after) + "）。管理者に確認してください" : "有給残 " + days(after));
-  }
-  toast(parts.join("。") || "登録できる日がありませんでした");
 });
 $("sPrev").addEventListener("click", () => { S.sView.setMonth(S.sView.getMonth() - 1); render(); });
 $("sNext").addEventListener("click", () => { S.sView.setMonth(S.sView.getMonth() + 1); render(); });
@@ -495,11 +498,20 @@ function renderRequestsAdmin() {
   const list = S.reqs.filter((r) => r.status === "pending").sort((a, b) => tsOf(a.createdAt) - tsOf(b.createdAt));
   $("reqBadge").hidden = !list.length; $("reqBadge").textContent = list.length;
   $("reqRows").innerHTML = list.length ? list.map((r) => {
-    const cur = dayOf(S.emps[r.uid], r.date);
-    return '<tr data-req="' + r.id + '"><td>' + esc(memberName(r.uid)) + '</td><td class="mono">' + dayLabel(r.date) + "</td>" +
-      '<td class="wrap">' + esc(cur ? describe(cur) : "記録なし") + '</td><td class="wrap">' + esc(describe(r.want)) + '</td><td class="wrap">' + esc(r.reason) + "</td>" +
+    let now;
+    if (r.kind === "leave") {
+      const pr = paidRemain(S.emps[r.uid], S.grants[r.uid]);
+      const need = (TYPES[r.leaveType] && TYPES[r.leaveType].paid || 0) * (r.dates || []).length;
+      now = need ? (pr ? "有給残 " + days(pr.remain) + (pr.remain - need < 0 ? "（足りません）" : "") : "有給の付与が未設定") : "—";
+    } else {
+      const cur = dayOf(S.emps[r.uid], r.date);
+      now = cur ? describe(cur) : "記録なし";
+    }
+    return '<tr data-req="' + r.id + '"><td>' + esc(memberName(r.uid)) + "</td><td>" + (r.kind === "leave" ? "休暇申請" : "修正依頼") +
+      '</td><td class="mono">' + requestDays(r) + "</td>" +
+      '<td class="wrap">' + esc(now) + '</td><td class="wrap">' + esc(requestBody(r)) + '</td><td class="wrap">' + esc(r.reason) + "</td>" +
       '<td><div class="req-actions"><button class="btn small primary" type="button" data-act="ok">承認</button><button class="btn small danger" type="button" data-act="ng">却下</button></div></td></tr>';
-  }).join("") : '<tr><td colspan="6" class="empty-note" style="padding:16px">承認待ちの修正依頼はありません。</td></tr>';
+  }).join("") : '<tr><td colspan="7" class="empty-note" style="padding:16px">承認待ちの申請・依頼はありません。</td></tr>';
 }
 $("reqRows").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-act]"); if (!btn) return;
@@ -507,7 +519,17 @@ $("reqRows").addEventListener("click", async (e) => {
   if (!r || r.status !== "pending") return;
   tr.querySelectorAll("button").forEach((b) => { b.disabled = true; });
   const ok = btn.dataset.act === "ok";
-  if (ok) {
+  let note = "";
+  if (ok && r.kind === "leave") {
+    // 休暇申請：申請された各日の区分を書き換える。終日の休みで打刻がある日は飛ばす
+    const ty = r.leaveType, skipped = [];
+    for (const v of r.dates || []) {
+      const cur = dayOf(S.emps[r.uid], v);
+      if (cur && cur.in && TYPES[ty] && TYPES[ty].full) { skipped.push(v); continue; }
+      if (!(await saveDay(r.uid, v, Object.assign({}, cur || {}, { type: ty })))) { tr.querySelectorAll("button").forEach((b) => { b.disabled = false; }); return; }
+    }
+    if (skipped.length) note = "打刻があるため反映しなかった日：" + skipped.map(shortDay).join("、");
+  } else if (ok) {
     const w = r.want || {};
     const d = { type: w.type || "", in: w.in || "", out: w.out || "", note: w.note || "" };
     if (typeof w.breakMin === "number") d.breakMin = w.breakMin;
@@ -515,8 +537,11 @@ $("reqRows").addEventListener("click", async (e) => {
     if (!(await saveDay(r.uid, r.date, empty ? null : d))) { tr.querySelectorAll("button").forEach((b) => { b.disabled = false; }); return; }
   }
   try {
-    await updateDoc(doc(db, "requests", r.id), { status: ok ? "approved" : "rejected", resolvedAt: serverTimestamp(), resolvedBy: S.user.uid });
-    toast(ok ? "修正依頼を承認し、記録を書き換えました" : "修正依頼を却下しました");
+    const patch = { status: ok ? "approved" : "rejected", resolvedAt: serverTimestamp(), resolvedBy: S.user.uid };
+    if (note) patch.adminNote = note;
+    await updateDoc(doc(db, "requests", r.id), patch);
+    const what = r.kind === "leave" ? "休暇申請" : "修正依頼";
+    toast(ok ? what + "を承認し、記録に反映しました" + (note ? "。" + note : "") : what + "を却下しました");
   } catch (err) { toast("依頼の状態を保存できませんでした（" + err.code + "）"); }
 });
 
@@ -608,8 +633,14 @@ function openEdit(target, key) {
   $("fReason").value = "";
   $("dlgSubmit").textContent = request ? "修正依頼を送る" : "保存";
   $("fType").value = d.type || "";
-  $("fIn").value = d.in || "";
-  $("fOut").value = d.out || "";
+  // 有給・特別休暇は、従業員は休暇申請からのみ（今の区分がそれなら残す）
+  const restrict = target.staff && !S.isAdmin && !request;
+  for (const opt of $("fType").options) opt.disabled = restrict && APPROVAL_TYPES.includes(opt.value) && opt.value !== (d.type || "");
+  $("typeNote").hidden = !restrict;
+  // 時刻が未入力の日は、出勤 9:00・退勤 18:00 を初期値にする（終日の休みの日は空のまま）
+  const blank = !d.in && !d.out && !T(d).full;
+  $("fIn").value = d.in || (blank ? "09:00" : "");
+  $("fOut").value = d.out || (blank ? "18:00" : "");
   $("fBreak").value = typeof d.breakMin === "number" ? d.breakMin : "";
   $("fNote").value = d.note || "";
   $("dlgDelete").hidden = request || !(d.in || d.note || d.type);
@@ -627,6 +658,9 @@ $("dlgForm").addEventListener("submit", async (e) => {
   const want = { type: ty, in: vin, out: vout, note };
   if (vin && brRaw !== "") want.breakMin = Math.max(0, Number(brRaw) || 0);
   const { target, key } = editing;
+  if (target.staff && !S.isAdmin && !editing.request && APPROVAL_TYPES.includes(ty) && ty !== ((dayOf(target.months, key) || {}).type || "")) {
+    toast("有給・特別休暇は、下の「休暇申請」から申請してください"); return;
+  }
 
   if (editing.request) {
     const reason = $("fReason").value.trim();
@@ -634,7 +668,7 @@ $("dlgForm").addEventListener("submit", async (e) => {
     $("dlg").close();
     try {
       // 同じ日の承認待ちの依頼は、新しい依頼で置き換える
-      for (const r of S.myReq.filter((x) => x.date === key && x.status === "pending")) await deleteDoc(doc(db, "requests", r.id));
+      for (const r of S.myReq.filter((x) => x.kind !== "leave" && x.date === key && x.status === "pending")) await deleteDoc(doc(db, "requests", r.id));
       await addDoc(collection(db, "requests"), { uid: S.user.uid, date: key, want, reason, status: "pending", createdAt: serverTimestamp() });
       toast(dayLabel(key) + " の修正依頼を管理者に送りました");
     } catch (err) { toast("修正依頼を送れませんでした（" + err.code + "）"); }
