@@ -17,6 +17,8 @@
   --green-soft: #dfeee3;
   --violet: #6a4fa0;
   --violet-soft: #e9e3f4;
+  --blue: #2457b3;        /* 出勤・直行・勤務中 */
+  --blue-soft: #e3ebf8;
   --sat: #2d5fa8; --sun: #b8322a;
   --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
@@ -75,7 +77,7 @@ h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
 .date { font-size: .9rem; color: var(--muted); margin-top: 6px; }
 .status-row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .pill { display: inline-block; border-radius: 999px; padding: 2px 12px; font-size: .78rem; font-weight: 700; background: var(--rule); color: var(--muted); white-space: nowrap; }
-.pill.working { background: var(--accent-soft); color: var(--accent); }
+.pill.working { background: var(--blue-soft); color: var(--blue); }
 .pill.done { background: var(--red-soft); color: var(--red); }
 .pill.paid { background: var(--green-soft); color: var(--green); }
 .pill.special { background: var(--green-soft); color: var(--green); border: 1px dashed var(--green); }
@@ -92,7 +94,7 @@ h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px; touch-action: manipulation;
 }
 .punch span { font-family: var(--font-mono); font-size: .75rem; font-weight: 400; opacity: .8; }
-.punch.in, .punch.dg { color: var(--accent); }
+.punch.in, .punch.dg { color: var(--blue); }
 .punch.out, .punch.dk { color: var(--red); }
 .punch.dg, .punch.dk { padding: 10px 14px; font-size: .95rem; border-style: dashed; }
 .punch:not(:disabled):hover { background: var(--rule); }
@@ -141,7 +143,8 @@ th { font-size: .72rem; color: var(--accent); font-weight: 700; letter-spacing: 
 .table-box.month-scroll::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 6px; border: 2px solid var(--rule); }
 td.num, th.num { text-align: right; }
 td.mono { font-family: var(--font-mono); font-size: .85rem; }
-td.t-in { color: var(--accent); }
+td.t-in { color: var(--blue); }
+.live { color: var(--blue); font-weight: 700; }
 td.t-out { color: var(--red); }
 td.ot { color: var(--red); font-weight: 700; }
 td.warnc { color: var(--amber); font-weight: 700; }
@@ -183,7 +186,22 @@ tr.sel { background: var(--accent-soft); }
 .rules { font-size: .75rem; color: var(--muted); margin: 0; }
 
 /* 使い方の注意書き（段落ごとに見出し付きで表示） */
-.notes { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; display: grid; gap: 12px; margin: 0; }
+.notes { background: var(--card); border: 1px solid var(--line); border-radius: 0 10px 10px 10px; padding: 14px 18px; display: grid; gap: 12px; margin: 0; }
+
+/* 「注意点」タブ：押すと下に開く */
+.notes-tab > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 16px; border: 1px solid var(--line); border-bottom: 0;
+  border-radius: 10px 10px 0 0; background: var(--accent-soft); color: var(--accent);
+  font-weight: 700; font-size: .85rem;
+}
+.notes-tab > summary::-webkit-details-marker { display: none; }
+.notes-tab > summary::after { content: "▼"; font-size: .65rem; transition: transform .15s; }
+.notes-tab[open] > summary { background: var(--card); }
+.notes-tab[open] > summary::after { transform: rotate(180deg); }
+.notes-tab:not([open]) > summary { border-bottom: 1px solid var(--line); border-radius: 10px; }
+.notes-tab > summary:hover { background: var(--accent); color: var(--card); }
 .notes h3 { margin: 0 0 2px; font-size: .82rem; color: var(--accent); }
 .notes p { margin: 0; font-size: .8rem; color: var(--ink); line-height: 1.75; }
 .notes section + section { border-top: 1px solid var(--rule); padding-top: 12px; }

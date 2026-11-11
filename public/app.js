@@ -283,7 +283,7 @@ function renderMonthTable(tbody, months, view, editable, pending) {
       "<td>" + (ty.label ? '<span class="pill sm ' + ty.cls + '">' + ty.label + "</span>" : "") +
         (pending && pending.has(key) ? ' <span class="pill sm req">修正依頼中</span>' : "") + "</td>" +
       '<td class="mono t-in">' + (d && d.in ? esc(d.in) + (d.direct ? '<span class="mark">直行</span>' : "") : DASH) + "</td>" +
-      '<td class="mono t-out">' + (d && d.out ? esc(d.out) + (d.straight ? '<span class="mark">直帰</span>' : "") : (live ? "勤務中" : DASH)) + "</td>" +
+      '<td class="mono t-out">' + (d && d.out ? esc(d.out) + (d.straight ? '<span class="mark">直帰</span>' : "") : (live ? '<span class="live">勤務中</span>' : DASH)) + "</td>" +
       '<td class="mono num">' + (c && c.work != null ? fmt(c.br) : DASH) + "</td>" +
       '<td class="mono num">' + (c && c.work != null ? fmt(c.work) : DASH) + "</td>" +
       '<td class="mono num' + (c && c.ot > 0 ? " ot" : "") + '">' + (c && c.ot > 0 ? fmt(c.ot) : DASH) + "</td>" +

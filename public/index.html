@@ -97,26 +97,6 @@
         </div>
       </section>
 
-      <form class="leave-form" id="leaveForm" autocomplete="off">
-        <strong>休暇の登録</strong>
-        <span class="range">
-          <input type="date" id="lvFrom" aria-label="休暇の開始日">
-          <span>〜</span>
-          <input type="date" id="lvTo" aria-label="休暇の終了日">
-        </span>
-        <label class="check" for="lvSkipWe"><input type="checkbox" id="lvSkipWe" checked>土日を除く</label>
-        <select id="lvType" aria-label="休暇の種類">
-          <option value="paid">有給（1日）</option>
-          <option value="paidHalf">有給（半日）</option>
-          <option value="special">特別休暇</option>
-          <option value="off">休暇</option>
-          <option value="half">半休</option>
-          <option value="comp">代休</option>
-        </select>
-        <button class="btn primary" type="submit">登録</button>
-        <span class="hint">1日だけのときは、開始日と終了日を同じ日にしてください（終了日が空でも1日として登録します）。退勤済みの日と、打刻がある日の終日の休みは登録せずに飛ばします。</span>
-      </form>
-
       <dl class="summary" aria-label="自分の月の集計">
         <div><dt>出勤日数</dt><dd id="sDays">0日</dd></div>
         <div><dt>総実働</dt><dd id="sWork">0:00</dd></div>
@@ -127,6 +107,26 @@
         <div><dt>代休取得（今月）／代休残</dt><dd id="sComp" class="vio">0日</dd></div>
         <div><dt>特別休暇（今月）</dt><dd id="sSpecial" class="grn">0日</dd></div>
       </dl>
+
+      <form class="leave-form" id="leaveForm" autocomplete="off">
+        <strong>休暇の登録</strong>
+        <span class="range">
+          <input type="date" id="lvFrom" aria-label="休暇の開始日">
+          <span>〜</span>
+          <input type="date" id="lvTo" aria-label="休暇の終了日">
+        </span>
+        <label class="check" for="lvSkipWe"><input type="checkbox" id="lvSkipWe" checked>土日を除く</label>
+        <select id="lvType" aria-label="休暇の種類">
+          <option value="off" selected>休暇</option>
+          <option value="paid">有給（1日）</option>
+          <option value="paidHalf">有給（半日）</option>
+          <option value="special">特別休暇</option>
+          <option value="half">半休</option>
+          <option value="comp">代休</option>
+        </select>
+        <button class="btn primary" type="submit">登録</button>
+        <span class="hint">1日だけのときは、開始日と終了日を同じ日にしてください（終了日が空でも1日として登録します）。退勤済みの日と、打刻がある日の終日の休みは登録せずに飛ばします。</span>
+      </form>
 
       <div class="bar">
         <button class="nav" id="sPrev" type="button" aria-label="前の月">←</button>
@@ -154,7 +154,9 @@
         </div>
       </section>
 
-      <div class="notes" aria-label="使い方の注意">
+      <details class="notes-tab">
+        <summary>注意点</summary>
+      <div class="notes">
         <section>
           <h3>退勤した日の修正</h3>
           <p>退勤した日の記録は、自分では変更できません。</p>
@@ -180,6 +182,7 @@
           <p>休日出勤した日は、表の行をタップして区分を「休日出勤」にすると、代休の残日数に加算されます。</p>
         </section>
       </div>
+      </details>
 
       <div class="actions">
         <span class="empty-note" id="sEmpty" hidden>この月の記録はまだありません。「出勤」で打刻するか、行をタップして時刻を入力できます。</span>
