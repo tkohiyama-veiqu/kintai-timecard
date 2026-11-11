@@ -153,7 +153,11 @@ if (!configured) {
 } else {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
-  db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  // 回線やプロキシによって常時接続（WebChannel）が通らない場合は、自動でロングポーリングに切り替える
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    experimentalAutoDetectLongPolling: true
+  });
   getRedirectResult(auth).catch((e) => showLoginError(e));
   onAuthStateChanged(auth, onUser);
 }

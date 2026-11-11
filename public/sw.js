@@ -1,6 +1,6 @@
 // アプリの画面（HTML・CSS・JS・アイコン）を端末に保存し、電波が弱くても起動できるようにする。
 // 勤怠データ自体は Firebase の端末キャッシュが受け持つ。
-const CACHE = "kintai-v6";
+const CACHE = "kintai-v7";
 const SHELL = [
   "./",
   "./index.html",

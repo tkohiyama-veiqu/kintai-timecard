@@ -26,6 +26,12 @@
     <div class="auth-card">
       <h1>勤怠管理</h1>
       <p id="bootMsg">読み込み中…</p>
+      <div id="bootHelp" hidden style="display:grid; gap:10px">
+        <p id="bootHelpText"></p>
+        <button class="btn primary" type="button" id="bootReload">もう一度読み込む</button>
+        <button class="btn" type="button" id="bootReset">保存されている古い版を消して読み込み直す</button>
+        <p class="empty-note" id="bootDiag" style="word-break:break-all"></p>
+      </div>
     </div>
   </section>
 
@@ -348,6 +354,40 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
   }
+
+  /* 起動の見張り：読み込み画面のまま止まったら、原因の手がかりと直し方を出す */
+  (function () {
+    var errors = [];
+    window.addEventListener("error", function (e) { errors.push((e.message || "error") + (e.filename ? " @" + e.filename.split("/").pop() : "")); });
+    window.addEventListener("unhandledrejection", function (e) { errors.push("promise: " + ((e.reason && (e.reason.code || e.reason.message)) || e.reason)); });
+    var started = Date.now();
+    function check() {
+      var boot = document.getElementById("bootView");
+      if (!boot || boot.hidden) return;
+      var stage = document.getElementById("bootMsg").textContent;
+      var help = document.getElementById("bootHelp");
+      var text;
+      if (stage.indexOf("読み込み中") === 0) {
+        text = "アプリのプログラムを読み込めていません。電波の良い場所で「もう一度読み込む」を押してください。直らない場合は「保存されている古い版を消して読み込み直す」を押してください。";
+      } else if (stage.indexOf("アカウントを確認") === 0) {
+        text = "サーバーに接続できていません。Wi-Fi とモバイルデータを切り替えるか、電波の良い場所で「もう一度読み込む」を押してください。直らない場合は「保存されている古い版を消して読み込み直す」を押してください。";
+      } else { return; }
+      document.getElementById("bootHelpText").textContent = text;
+      document.getElementById("bootDiag").textContent =
+        "状況：" + stage + "／経過 " + Math.round((Date.now() - started) / 1000) + "秒／" + (navigator.onLine ? "オンライン" : "オフライン") +
+        (errors.length ? "／エラー：" + errors.slice(-3).join(" | ") : "");
+      help.hidden = false;
+    }
+    setTimeout(check, 12000);
+    setInterval(check, 5000);
+    document.getElementById("bootReload").addEventListener("click", function () { location.reload(); });
+    document.getElementById("bootReset").addEventListener("click", function () {
+      var jobs = [];
+      if ("serviceWorker" in navigator) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+      if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+      Promise.all(jobs).catch(function () {}).then(function () { location.replace(location.pathname + "?r=" + Date.now()); });
+    });
+  })();
 </script>
 </body>
 </html>
