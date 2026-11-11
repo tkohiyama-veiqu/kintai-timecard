@@ -661,7 +661,9 @@ const AUTH_MSG = {
   "auth/popup-closed-by-user": "ログイン画面が閉じられました",
   "auth/too-many-requests": "試行回数が多すぎます。しばらく待ってからもう一度お試しください",
   "auth/network-request-failed": "通信できませんでした。電波の状態を確認してください",
-  "auth/unauthorized-domain": "このURLはログインが許可されていません。Firebase の「承認済みドメイン」に追加してください"
+  "auth/unauthorized-domain": "このURLはログインが許可されていません。Firebase の「承認済みドメイン」に追加してください",
+  "auth/configuration-not-found": "ログイン機能がまだ準備されていません。管理者が Firebase の Authentication を「始める」で有効にし、ログイン方法を設定してください",
+  "auth/operation-not-allowed": "このログイン方法は有効になっていません。管理者が Firebase の Authentication でログイン方法を有効にしてください"
 };
 function showLoginError(e) { if (e) $("loginErr").textContent = AUTH_MSG[e.code] || ("ログインできませんでした（" + (e.code || e.message) + "）"); }
 $("googleBtn").addEventListener("click", async () => {
