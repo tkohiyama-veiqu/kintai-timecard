@@ -278,7 +278,8 @@ async function saveDay(uid, date, d, extra) {
     return false;
   }
 }
-const isLockedForMe = (d) => !S.isAdmin && !!(d && d.out);
+// 従業員画面では、管理者も従業員と同じく退勤済みの日は直接直せない（直すのは管理者画面から）
+const isLockedForMe = (d) => !!(d && d.out);
 
 /* ================= 月のタイムカード表 ================= */
 function renderMonthTable(tbody, months, view, editable, pending) {
@@ -337,7 +338,7 @@ function renderStaff() {
   const pr = paidRemain(S.my, S.myGrant);
   $("sPaid").className = pr && pr.remain < 0 ? "red" : "grn";
   const ex = paidExpiry(S.myGrant);
-  $("sPaid").innerHTML = (pr ? "残 " + days(pr.remain) : "未設定") + "<small>／今年 " + days(lt.paidYear) + " 使用</small>" +
+  $("sPaid").innerHTML = (pr ? days(pr.remain) : "未設定") + "<small>／" + days(lt.paidYear) + "</small>" +
     '<span class="exp">' + (ex ? "期限 " + ex.main + (ex.carry ? "（繰越分 " + ex.carry + "）" : "") : "期限：付与日の登録後に表示") + "</span>";
   $("sPaid").title = pr ? "付与 " + days(pr.total) + "（" + S.myGrant.date + " から）／取得 " + days(pr.used) : "管理者がまだ有給の付与日数を登録していません";
   $("sSpecial").textContent = days(t.special);
@@ -383,7 +384,7 @@ $("pOut").addEventListener("click", async () => {
   const a = activeDay(S.my); if (!a.day) return;
   const now = hhmm(new Date());
   if (await mutateMine(a.key, (d) => { d.out = now; }, { outAt: serverTimestamp() }))
-    toast(now + " に退勤しました。お疲れさまでした" + (S.isAdmin ? "" : "（この日の修正は管理者への依頼になります）"));
+    toast(now + " に退勤しました。お疲れさまでした（この日の修正は管理者への依頼になります）");
 });
 $("pDg").addEventListener("click", async () => {
   const t = new Date();
@@ -670,7 +671,7 @@ function openEdit(target, key) {
   $("dlgSubmit").textContent = request ? "修正依頼を送る" : "保存";
   // 区分の選択肢：従業員は有給・有給（半日）・特別休暇を選べない（休暇申請からのみ）。
   // ただし承認済みでその区分が付いている日は、今の区分として表示だけ残す
-  const restrict = target.staff && !S.isAdmin;
+  const restrict = !!target.staff; // 従業員画面は、管理者が開いても同じ制限
   const curType = d.type || "";
   const order = ["", "paid", "paidHalf", "special", "off", "half", "comp", "hw"];
   $("fType").innerHTML = order
@@ -700,7 +701,7 @@ $("dlgForm").addEventListener("submit", async (e) => {
   const want = { type: ty, in: vin, out: vout, note };
   if (vin && brRaw !== "") want.breakMin = Math.max(0, Number(brRaw) || 0);
   const { target, key } = editing;
-  if (target.staff && !S.isAdmin && APPROVAL_TYPES.includes(ty) && ty !== ((dayOf(target.months, key) || {}).type || "")) {
+  if (target.staff && APPROVAL_TYPES.includes(ty) && ty !== ((dayOf(target.months, key) || {}).type || "")) {
     toast("有給・特別休暇は、下の「休暇申請」から申請してください"); return;
   }
 
