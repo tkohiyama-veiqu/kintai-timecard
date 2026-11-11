@@ -116,6 +116,13 @@ function longTotals(months, year) {
   return { paidYear, compLeft: hw - comp };
 }
 /* 有給残 = 付与日数 + 繰越日数 − 付与日以降に取った有給（半日は0.5） */
+/* 有給の期限（労基法115条の時効2年）。今回付与分は付与日の2年後の前日、繰越分（前年付与分）は付与日の1年後の前日 */
+function paidExpiry(g) {
+  if (!g || !g.date) return null;
+  const at = (years) => { const d = new Date(g.date + "T00:00"); d.setFullYear(d.getFullYear() + years); d.setDate(d.getDate() - 1); return d; };
+  const fmtD = (d) => d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate();
+  return { main: fmtD(at(2)), carry: Number(g.carry) > 0 ? fmtD(at(1)) : null };
+}
 function paidRemain(months, g) {
   if (!g || !g.date) return null;
   let used = 0;
@@ -329,22 +336,37 @@ function renderStaff() {
   $("sPayable").textContent = fmt(t.payable);
   const pr = paidRemain(S.my, S.myGrant);
   $("sPaid").className = pr && pr.remain < 0 ? "red" : "grn";
-  $("sPaid").innerHTML = (pr ? days(pr.remain) : "未設定") + "<small>今月 " + days(t.paid) + "・今年 " + days(lt.paidYear) + "</small>";
+  const ex = paidExpiry(S.myGrant);
+  $("sPaid").innerHTML = (pr ? "残 " + days(pr.remain) : "未設定") + "<small>／今年 " + days(lt.paidYear) + " 使用</small>" +
+    '<span class="exp">' + (ex ? "期限 " + ex.main + (ex.carry ? "（繰越分 " + ex.carry + "）" : "") : "期限：付与日の登録後に表示") + "</span>";
   $("sPaid").title = pr ? "付与 " + days(pr.total) + "（" + S.myGrant.date + " から）／取得 " + days(pr.used) : "管理者がまだ有給の付与日数を登録していません";
   $("sSpecial").textContent = days(t.special);
   $("sOff").textContent = days(t.off);
   $("sComp").innerHTML = days(t.comp) + "<small>／残 " + days(lt.compLeft) + "</small>";
   $("sEmpty").hidden = any;
 
-  const items = S.myReq.slice().sort((x, y2) => tsOf(y2.createdAt) - tsOf(x.createdAt)).slice(0, 20);
-  $("myReqBox").hidden = !items.length;
+  // 申請・依頼の状況：ふだんは承認待ちだけ。承認・却下済みはボタンで表示
+  const all = S.myReq.slice().sort((x, y2) => tsOf(y2.createdAt) - tsOf(x.createdAt));
+  const pendingItems = all.filter((r) => r.status === "pending");
+  const doneItems = all.filter((r) => r.status !== "pending").slice(0, 30);
+  $("myReqBox").hidden = !all.length;
+  $("myReqBadge").hidden = !pendingItems.length;
+  $("myReqBadge").textContent = pendingItems.length;
   const RS = { pending: ["承認待ち", "req"], approved: ["承認済み", "ok"], rejected: ["却下", "ng"] };
-  $("myReqRows").innerHTML = items.map((r) => {
+  const row = (r) => {
     const s2 = RS[r.status] || RS.pending;
     return "<tr><td>" + (r.kind === "leave" ? "休暇申請" : "修正依頼") + '</td><td class="mono">' + requestDays(r) + '</td><td class="wrap">' + esc(requestBody(r)) + '</td><td class="wrap">' + esc(r.reason) +
       '</td><td><span class="pill sm ' + s2[1] + '">' + s2[0] + '</span></td><td class="wrap">' + esc(r.adminNote) + "</td></tr>";
-  }).join("");
+  };
+  const shown = showDoneReq ? pendingItems.concat(doneItems) : pendingItems;
+  $("myReqRows").innerHTML = shown.length ? shown.map(row).join("")
+    : '<tr><td colspan="6" class="empty-note" style="padding:14px">承認待ちの申請・依頼はありません。</td></tr>';
+  $("myReqMore").hidden = !doneItems.length;
+  $("myReqMore").textContent = showDoneReq ? "承認・却下済みを隠す" : "承認・却下済みも表示（" + doneItems.length + "件）";
+  $("myReqMore").setAttribute("aria-expanded", String(showDoneReq));
 }
+let showDoneReq = false;
+$("myReqMore").addEventListener("click", () => { showDoneReq = !showDoneReq; render(); });
 const tsOf = (t) => (t && typeof t.toMillis === "function") ? t.toMillis() : (t ? Date.parse(t) || 0 : Date.now());
 
 async function mutateMine(date, fn, extra) {
@@ -494,9 +516,13 @@ function renderAdmin() {
   renderMembers();
 }
 
+const reqDrafts = {}; // 入力途中のコメント（描き直しても消えないように保持）
 function renderRequestsAdmin() {
   const list = S.reqs.filter((r) => r.status === "pending").sort((a, b) => tsOf(a.createdAt) - tsOf(b.createdAt));
   $("reqBadge").hidden = !list.length; $("reqBadge").textContent = list.length;
+  // コメントを入力中は、一覧を描き直さない（入力が途切れないように）
+  const ae = document.activeElement;
+  if (ae && ae.classList && ae.classList.contains("req-cmt") && $("reqRows").contains(ae)) return;
   $("reqRows").innerHTML = list.length ? list.map((r) => {
     let now;
     if (r.kind === "leave") {
@@ -510,13 +536,21 @@ function renderRequestsAdmin() {
     return '<tr data-req="' + r.id + '"><td>' + esc(memberName(r.uid)) + "</td><td>" + (r.kind === "leave" ? "休暇申請" : "修正依頼") +
       '</td><td class="mono">' + requestDays(r) + "</td>" +
       '<td class="wrap">' + esc(now) + '</td><td class="wrap">' + esc(requestBody(r)) + '</td><td class="wrap">' + esc(r.reason) + "</td>" +
+      '<td class="cmt-cell"><input type="text" class="req-cmt" id="cmt-' + r.id + '" maxlength="200" placeholder="コメント（任意）" aria-label="承認・却下のコメント" value="' + esc(reqDrafts[r.id] || "") + '"></td>' +
       '<td><div class="req-actions"><button class="btn small primary" type="button" data-act="ok">承認</button><button class="btn small danger" type="button" data-act="ng">却下</button></div></td></tr>';
-  }).join("") : '<tr><td colspan="7" class="empty-note" style="padding:16px">承認待ちの申請・依頼はありません。</td></tr>';
+  }).join("") : '<tr><td colspan="8" class="empty-note" style="padding:16px">承認待ちの申請・依頼はありません。</td></tr>';
 }
+$("reqRows").addEventListener("input", (e) => {
+  if (e.target.classList.contains("req-cmt")) reqDrafts[e.target.closest("tr").dataset.req] = e.target.value;
+});
+$("reqRows").addEventListener("focusout", (e) => {
+  if (e.target.classList.contains("req-cmt")) setTimeout(() => { if (!$("reqRows").contains(document.activeElement)) renderRequestsAdmin(); }, 0);
+});
 $("reqRows").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-act]"); if (!btn) return;
   const tr = btn.closest("tr"), r = S.reqs.find((x) => x.id === tr.dataset.req);
   if (!r || r.status !== "pending") return;
+  const comment = (tr.querySelector(".req-cmt") ? tr.querySelector(".req-cmt").value : (reqDrafts[r.id] || "")).trim();
   tr.querySelectorAll("button").forEach((b) => { b.disabled = true; });
   const ok = btn.dataset.act === "ok";
   let note = "";
@@ -538,8 +572,10 @@ $("reqRows").addEventListener("click", async (e) => {
   }
   try {
     const patch = { status: ok ? "approved" : "rejected", resolvedAt: serverTimestamp(), resolvedBy: S.user.uid };
-    if (note) patch.adminNote = note;
+    const adminNote = [comment, note].filter(Boolean).join("／");
+    if (adminNote) patch.adminNote = adminNote;
     await updateDoc(doc(db, "requests", r.id), patch);
+    delete reqDrafts[r.id];
     const what = r.kind === "leave" ? "休暇申請" : "修正依頼";
     toast(ok ? what + "を承認し、記録に反映しました" + (note ? "。" + note : "") : what + "を却下しました");
   } catch (err) { toast("依頼の状態を保存できませんでした（" + err.code + "）"); }
@@ -632,10 +668,16 @@ function openEdit(target, key) {
   $("reasonRow").hidden = !request;
   $("fReason").value = "";
   $("dlgSubmit").textContent = request ? "修正依頼を送る" : "保存";
-  $("fType").value = d.type || "";
-  // 有給・特別休暇は、従業員は休暇申請からのみ（今の区分がそれなら残す）
-  const restrict = target.staff && !S.isAdmin && !request;
-  for (const opt of $("fType").options) opt.disabled = restrict && APPROVAL_TYPES.includes(opt.value) && opt.value !== (d.type || "");
+  // 区分の選択肢：従業員は有給・有給（半日）・特別休暇を選べない（休暇申請からのみ）。
+  // ただし承認済みでその区分が付いている日は、今の区分として表示だけ残す
+  const restrict = target.staff && !S.isAdmin;
+  const curType = d.type || "";
+  const order = ["", "paid", "paidHalf", "special", "off", "half", "comp", "hw"];
+  $("fType").innerHTML = order
+    .filter((v) => !restrict || !APPROVAL_TYPES.includes(v) || v === curType)
+    .map((v) => '<option value="' + v + '">' + (v === "" ? "通常勤務" : v === "paid" ? "有給（1日）" : TYPES[v].label) + "</option>")
+    .join("");
+  $("fType").value = curType;
   $("typeNote").hidden = !restrict;
   // 時刻が未入力の日は、出勤 9:00・退勤 18:00 を初期値にする（終日の休みの日は空のまま）
   const blank = !d.in && !d.out && !T(d).full;
@@ -658,7 +700,7 @@ $("dlgForm").addEventListener("submit", async (e) => {
   const want = { type: ty, in: vin, out: vout, note };
   if (vin && brRaw !== "") want.breakMin = Math.max(0, Number(brRaw) || 0);
   const { target, key } = editing;
-  if (target.staff && !S.isAdmin && !editing.request && APPROVAL_TYPES.includes(ty) && ty !== ((dayOf(target.months, key) || {}).type || "")) {
+  if (target.staff && !S.isAdmin && APPROVAL_TYPES.includes(ty) && ty !== ((dayOf(target.months, key) || {}).type || "")) {
     toast("有給・特別休暇は、下の「休暇申請」から申請してください"); return;
   }
 

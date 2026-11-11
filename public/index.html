@@ -101,8 +101,8 @@
         <div><dt>出勤日数</dt><dd id="sDays">0日</dd></div>
         <div><dt>総実働</dt><dd id="sWork">0:00</dd></div>
         <div><dt>総残業</dt><dd id="sOt" class="red">0:00</dd></div>
-        <div><dt>有給・特別休暇を含む労働時間</dt><dd id="sPayable">0:00</dd></div>
-        <div><dt>有給残（取得日数）</dt><dd id="sPaid" class="grn">未設定</dd></div>
+        <div><dt class="oneline">総労働時間（有給・特別休暇を含む）</dt><dd id="sPayable">0:00</dd></div>
+        <div><dt>有給残／今年の使用</dt><dd id="sPaid" class="grn">未設定</dd></div>
         <div><dt>休暇・半休（今月）</dt><dd id="sOff" class="amb">0日</dd></div>
         <div><dt>代休取得（今月）／代休残</dt><dd id="sComp" class="vio">0日</dd></div>
         <div><dt>特別休暇（今月）</dt><dd id="sSpecial" class="grn">0日</dd></div>
@@ -142,15 +142,18 @@
         <span class="hint">申請すると管理者に承認依頼が届き、承認されるとカレンダーに反映されます。1日だけのときは、終了日を空のままにしてください。</span>
       </form>
 
-      <section class="stack" id="myReqBox" hidden style="gap:10px">
-        <h2>申請・依頼の状況</h2>
-        <div class="table-box">
-          <table>
-            <thead><tr><th>種類</th><th>日付</th><th>内容</th><th>理由</th><th>状態</th><th>管理者のコメント</th></tr></thead>
-            <tbody id="myReqRows"></tbody>
-          </table>
+      <details class="notes-tab" id="myReqBox" hidden open>
+        <summary>申請・依頼の状況<span class="badge" id="myReqBadge" hidden>0</span></summary>
+        <div class="tab-body">
+          <div class="table-box">
+            <table>
+              <thead><tr><th>種類</th><th>日付</th><th>内容</th><th>理由</th><th>状態</th><th>管理者のコメント</th></tr></thead>
+              <tbody id="myReqRows"></tbody>
+            </table>
+          </div>
+          <button class="btn small" type="button" id="myReqMore" aria-expanded="false"></button>
         </div>
-      </section>
+      </details>
 
       <details class="notes-tab">
         <summary>注意点</summary>
@@ -203,7 +206,7 @@
         </div>
         <div class="table-box">
           <table>
-            <thead><tr><th>従業員</th><th>種類</th><th>日付</th><th>今の記録・有給残</th><th>内容</th><th>理由</th><th>操作</th></tr></thead>
+            <thead><tr><th>従業員</th><th>種類</th><th>日付</th><th>今の記録・有給残</th><th>内容</th><th>理由</th><th>コメント（従業員に表示）</th><th>操作</th></tr></thead>
             <tbody id="reqRows"></tbody>
           </table>
         </div>
