@@ -1,0 +1,8 @@
+# claude.ai 版（参考用。GitHub には上げない）
+todo.html
+attendance.html
+
+# Firebase コマンドの作業ファイル
+.firebase/
+*.log
+node_modules/

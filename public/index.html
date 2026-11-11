@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>勤怠タイムカード</title>
+<meta name="description" content="出勤・退勤の打刻と休暇の登録、管理者による勤怠の確認ができる勤怠管理アプリ">
+<meta name="theme-color" content="#1f5f73">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="勤怠">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== 読み込み中・設定不足 ===== -->
+  <section id="bootView" class="center">
+    <div class="auth-card">
+      <h1>勤怠タイムカード</h1>
+      <p id="bootMsg">読み込み中…</p>
+    </div>
+  </section>
+
+  <!-- ===== ログイン ===== -->
+  <section id="loginView" class="center" hidden>
+    <div class="auth-card">
+      <h1>勤怠タイムカード</h1>
+      <p>会社から案内されたアカウントでログインしてください。初めての人は、ログイン後に管理者の承認を待ってから使えるようになります。</p>
+      <button class="btn primary" id="googleBtn" type="button">Google アカウントでログイン</button>
+      <div class="divider">またはメールアドレス</div>
+      <form id="emailForm" autocomplete="on">
+        <input type="email" id="loginEmail" placeholder="メールアドレス" autocomplete="email" required aria-label="メールアドレス">
+        <input type="password" id="loginPass" placeholder="パスワード（6文字以上）" autocomplete="current-password" minlength="6" required aria-label="パスワード">
+        <div class="row">
+          <button class="btn primary" type="submit" id="loginBtn">ログイン</button>
+          <button class="btn" type="button" id="signupBtn">新しく登録</button>
+        </div>
+        <button class="linkish" type="button" id="resetBtn">パスワードを忘れた</button>
+      </form>
+      <div class="err" id="loginErr" role="alert"></div>
+    </div>
+  </section>
+
+  <!-- ===== 承認待ち・利用停止 ===== -->
+  <section id="pendingView" class="center" hidden>
+    <div class="auth-card">
+      <h1>勤怠タイムカード</h1>
+      <p id="pendingMsg">管理者の承認待ちです。承認されると、この画面が自動で切り替わります。</p>
+      <form id="nameForm">
+        <label class="empty-note" for="myName">表示名（管理者の画面に出る名前）</label>
+        <input type="text" id="myName" maxlength="40" required>
+        <button class="btn" type="submit">名前を保存</button>
+      </form>
+      <p id="pendingWho"></p>
+      <button class="btn" type="button" id="pendingLogout">ログアウト</button>
+    </div>
+  </section>
+
+  <!-- ===== アプリ本体 ===== -->
+  <div id="appView" class="stack" hidden>
+    <header>
+      <h1>勤怠タイムカード<small id="viewName">従業員</small></h1>
+      <div class="head-right">
+        <nav class="tabs" id="tabs" hidden aria-label="画面の切り替え">
+          <a href="#staff" id="tabStaff">従業員</a>
+          <a href="#admin" id="tabAdmin">管理者</a>
+        </nav>
+        <span class="net" id="net">オンライン</span>
+        <span class="who"><span id="whoName"></span><button class="btn small" type="button" id="logoutBtn">ログアウト</button></span>
+      </div>
+    </header>
+
+    <!-- ===== 従業員画面 ===== -->
+    <main id="staffView">
+      <section class="panel" aria-label="打刻">
+        <div>
+          <div class="clock" id="clock">--:--<small>:--</small></div>
+          <div class="date" id="date"></div>
+          <div class="status-row">
+            <span class="pill" id="statusPill">未出勤</span>
+            <span class="today-stats" id="todayStats"></span>
+          </div>
+        </div>
+        <div class="punches">
+          <button class="punch in" id="pIn" type="button">出勤<span id="pInT">--:--</span></button>
+          <button class="punch out" id="pOut" type="button">退勤<span id="pOutT">--:--</span></button>
+          <button class="punch dg" id="pDg" type="button">直行<span>09:00 で出勤</span></button>
+          <button class="punch dk" id="pDk" type="button">直帰<span>18:00 で退勤</span></button>
+        </div>
+      </section>
+
+      <form class="leave-form" id="leaveForm" autocomplete="off">
+        <strong>休暇の登録</strong>
+        <input type="date" id="lvDate" aria-label="休暇の日付">
+        <select id="lvType" aria-label="休暇の種類">
+          <option value="paid">有給（1日）</option>
+          <option value="paidHalf">有給（半日）</option>
+          <option value="special">特別休暇</option>
+          <option value="off">休暇</option>
+          <option value="half">半休</option>
+          <option value="comp">代休</option>
+        </select>
+        <button class="btn primary" type="submit">登録</button>
+        <span class="hint">半日有給・半休の日は、残りの半日を出勤・退勤で打刻してください。休日出勤した日は、表の行をタップして区分を「休日出勤」にすると代休の残日数に加算されます。</span>
+      </form>
+
+      <dl class="summary" aria-label="自分の月の集計">
+        <div><dt>出勤日数</dt><dd id="sDays">0日</dd></div>
+        <div><dt>総実働</dt><dd id="sWork">0:00</dd></div>
+        <div><dt>総残業</dt><dd id="sOt" class="red">0:00</dd></div>
+        <div><dt>有給・特別休暇を含む労働時間</dt><dd id="sPayable">0:00</dd></div>
+        <div><dt>有給残（取得日数）</dt><dd id="sPaid" class="grn">未設定</dd></div>
+        <div><dt>特別休暇（今月）</dt><dd id="sSpecial" class="grn">0日</dd></div>
+        <div><dt>休暇・半休（今月）</dt><dd id="sOff" class="amb">0日</dd></div>
+        <div><dt>代休取得（今月）／代休残</dt><dd id="sComp" class="vio">0日</dd></div>
+      </dl>
+
+      <div class="bar">
+        <button class="nav" id="sPrev" type="button" aria-label="前の月">←</button>
+        <h2 class="month" id="sMonth"></h2>
+        <button class="nav" id="sNext" type="button" aria-label="次の月">→</button>
+        <button class="nav" id="sThis" type="button">今月</button>
+        <span class="spacer"></span>
+        <span class="std-note" id="sStd"></span>
+      </div>
+
+      <div class="table-box">
+        <table>
+          <thead><tr><th>日付</th><th>区分</th><th>出勤</th><th>退勤</th><th class="num">休憩</th><th class="num">実働</th><th class="num">残業</th><th>メモ</th></tr></thead>
+          <tbody id="sRows"></tbody>
+        </table>
+      </div>
+
+      <section class="stack" id="myReqBox" hidden style="gap:10px">
+        <h2>修正依頼</h2>
+        <div class="table-box">
+          <table>
+            <thead><tr><th>日付</th><th>依頼内容</th><th>理由</th><th>状態</th><th>管理者のコメント</th></tr></thead>
+            <tbody id="myReqRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <p class="rules">退勤した日の記録は自分では変更できません。変更したいときは表の行をタップし、修正依頼を管理者に送ってください。直行は 09:00、直帰は 18:00 で記録します。<br>休憩は労働基準法に沿って自動で差し引きます（勤務が6時間を超えると45分、8時間を超えると60分）。有給と特別休暇は1日につき所定労働時間分を「有給・特別休暇を含む労働時間」に加えます（半日有給は半分）。休暇・半休・代休は加えません。どの休みも残業には含めません。</p>
+
+      <div class="actions">
+        <span class="empty-note" id="sEmpty" hidden>この月の記録はまだありません。「出勤」で打刻するか、行をタップして時刻を入力できます。</span>
+        <button class="btn" id="sCsv" type="button">CSVをダウンロード</button>
+      </div>
+    </main>
+
+    <!-- ===== 管理者画面 ===== -->
+    <main id="adminView" hidden>
+      <section class="stack" style="gap:10px">
+        <div class="section-head">
+          <h2>修正依頼<span class="badge" id="reqBadge" hidden>0</span></h2>
+          <span>承認すると依頼の内容で記録を書き換えます</span>
+        </div>
+        <div class="table-box">
+          <table>
+            <thead><tr><th>従業員</th><th>日付</th><th>今の記録</th><th>依頼内容</th><th>理由</th><th>操作</th></tr></thead>
+            <tbody id="reqRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="section-head">
+        <h2>今日の勤務状況</h2>
+        <span id="aToday"></span>
+      </div>
+      <dl class="summary five" aria-label="今日の人数">
+        <div><dt>利用中の人数</dt><dd id="cAll">0</dd></div>
+        <div><dt>勤務中</dt><dd id="cWork" class="acc">0</dd></div>
+        <div><dt>退勤済</dt><dd id="cDone" class="red">0</dd></div>
+        <div><dt>休暇</dt><dd id="cLeave" class="grn">0</dd></div>
+        <div><dt>未出勤</dt><dd id="cNone">0</dd></div>
+      </dl>
+      <div class="table-box">
+        <table>
+          <thead><tr><th>従業員</th><th>状態</th><th>出勤</th><th>退勤</th><th class="num">休憩</th><th class="num">実働</th><th>メモ</th></tr></thead>
+          <tbody id="todayRows"></tbody>
+        </table>
+      </div>
+
+      <div class="section-head" style="margin-top:8px">
+        <h2>月次集計</h2>
+        <span>行をタップすると個人の明細を表示します</span>
+      </div>
+      <div class="bar">
+        <button class="nav" id="aPrev" type="button" aria-label="前の月">←</button>
+        <h2 class="month" id="aMonth"></h2>
+        <button class="nav" id="aNext" type="button" aria-label="次の月">→</button>
+        <button class="nav" id="aThis" type="button">今月</button>
+        <span class="spacer"></span>
+        <label for="setStd">所定労働
+          <select id="setStd">
+            <option value="420">7時間</option>
+            <option value="450">7時間30分</option>
+            <option value="480">8時間</option>
+          </select>
+        </label>
+        <label for="setLimit">月の残業上限
+          <select id="setLimit">
+            <option value="2700">45時間</option>
+            <option value="2400">40時間</option>
+            <option value="1800">30時間</option>
+            <option value="1200">20時間</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-box">
+        <table>
+          <thead><tr><th>従業員</th><th class="num">出勤日数</th><th class="num">総実働</th><th class="num">総残業</th><th>残業上限まで</th><th class="num">有給</th><th class="num">有給残</th><th class="num">特別休暇</th><th class="num">休暇・半休</th><th class="num">代休</th><th class="num">代休残</th><th class="num">今年の有給</th></tr></thead>
+          <tbody id="monthRows"></tbody>
+        </table>
+      </div>
+      <p class="rules">「今年の有給」が5日未満の人は黄色で表示します（年10日以上付与される従業員には年5日の取得義務があります）。代休残は、これまでの休日出勤の日数から代休の取得日数を引いた数です。</p>
+      <div class="actions">
+        <button class="btn" id="aCsv" type="button">全員分のCSVをダウンロード</button>
+      </div>
+
+      <section id="detail" class="stack" hidden style="gap:12px">
+        <div class="section-head">
+          <h2 id="dName"></h2>
+          <button class="nav" id="dClose" type="button">明細を閉じる</button>
+        </div>
+        <form class="leave-form" id="grantForm" autocomplete="off">
+          <strong>有給の付与</strong>
+          <label class="empty-note" for="gDate">付与日</label><input type="date" id="gDate" required>
+          <label class="empty-note" for="gDays">付与日数</label><input type="number" id="gDays" min="0" max="40" step="0.5" style="width:5.5em" required>
+          <label class="empty-note" for="gCarry">前年からの繰越</label><input type="number" id="gCarry" min="0" max="40" step="0.5" style="width:5.5em" value="0">
+          <button class="btn primary" type="submit">保存</button>
+          <span class="hint" id="gInfo"></span>
+        </form>
+        <p class="empty-note" style="margin:0">行をタップすると、この従業員の記録や休暇を修正できます。</p>
+        <div class="table-box">
+          <table>
+            <thead><tr><th>日付</th><th>区分</th><th>出勤</th><th>退勤</th><th class="num">休憩</th><th class="num">実働</th><th class="num">残業</th><th>メモ</th></tr></thead>
+            <tbody id="dRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="stack" style="gap:10px; margin-top:8px">
+        <div class="section-head">
+          <h2>従業員の管理<span class="badge" id="memBadge" hidden>0</span></h2>
+          <span>アプリにログインした人がここに並びます。承認するまで打刻できません</span>
+        </div>
+        <div class="table-box">
+          <table>
+            <thead><tr><th>名前</th><th>メールアドレス</th><th>役割</th><th>状態</th><th>操作</th></tr></thead>
+            <tbody id="memRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <h3 id="dlgTitle">記録を編集</h3>
+    <p class="lock-note" id="lockNote" hidden>この日は退勤済みのため、直接は変更できません。直したい内容と理由を入れて、管理者に修正依頼を送ってください。承認されると記録に反映されます。</p>
+    <div class="fields">
+      <label for="fType">区分</label>
+      <select id="fType">
+        <option value="">通常勤務</option>
+        <option value="paid">有給（1日）</option>
+        <option value="paidHalf">有給（半日）</option>
+        <option value="special">特別休暇</option>
+        <option value="off">休暇</option>
+        <option value="half">半休</option>
+        <option value="comp">代休</option>
+        <option value="hw">休日出勤</option>
+      </select>
+      <label for="fIn">出勤</label><input type="time" id="fIn">
+      <label for="fOut">退勤</label><input type="time" id="fOut">
+      <label for="fBreak">休憩（分）</label><input type="number" id="fBreak" min="0" max="600" step="5" placeholder="自動">
+      <span class="sub">空欄なら勤務時間から自動で計算します</span>
+      <label for="fNote">メモ</label><input type="text" id="fNote" maxlength="100" placeholder="例：在宅、通院">
+      <div id="reasonRow" hidden style="display:contents">
+        <label for="fReason">修正の理由</label><input type="text" id="fReason" maxlength="200" placeholder="例：退勤を押し忘れ、実際は19:30まで勤務">
+      </div>
+    </div>
+    <div class="dlg-actions">
+      <button class="btn danger" type="button" id="dlgDelete">この日の記録を削除</button>
+      <div>
+        <button class="btn" type="button" id="dlgCancel">キャンセル</button>
+        <button class="btn primary" type="submit" id="dlgSubmit">保存</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script type="module" src="app.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+</script>
+</body>
+</html>
